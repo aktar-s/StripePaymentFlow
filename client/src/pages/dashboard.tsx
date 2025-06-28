@@ -1,45 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Elements } from '@stripe/react-stripe-js';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PaymentForm } from '@/components/payment-form';
+import { PaymentFormWrapper } from '@/components/payment-form';
 import { TransactionHistory } from '@/components/transaction-history';
 import { RefundManagement } from '@/components/refund-management';
-import { stripePromise } from '@/lib/stripe';
-import { apiRequest } from '@/lib/queryClient';
 import { CreditCard, List, RotateCcw } from 'lucide-react';
 import type { StripeConfig } from '@/types/stripe';
 
 export default function Dashboard() {
-  const [clientSecret, setClientSecret] = useState<string>('');
   const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<string>('');
   const [activeTab, setActiveTab] = useState('payment');
 
   const { data: stripeConfig } = useQuery<StripeConfig>({
     queryKey: ['/api/stripe-status'],
   });
-
-  // Create a new payment intent when the component mounts
-  useEffect(() => {
-    const createPaymentIntent = async () => {
-      try {
-        const response = await apiRequest('POST', '/api/create-payment-intent', {
-          amount: 1.00,
-          description: 'Default payment',
-          customerEmail: '',
-        });
-        const { clientSecret } = await response.json();
-        setClientSecret(clientSecret);
-      } catch (error) {
-        console.error('Error creating initial payment intent:', error);
-      }
-    };
-
-    createPaymentIntent();
-  }, []);
 
   const handlePaymentSuccess = (paymentIntentId: string) => {
     // Switch to transactions tab to show the successful payment
@@ -49,10 +26,6 @@ export default function Dashboard() {
   const handleRefundClick = (paymentIntentId: string) => {
     setSelectedPaymentForRefund(paymentIntentId);
     setActiveTab('refunds');
-  };
-
-  const stripeOptions = {
-    clientSecret,
   };
 
   return (
@@ -113,11 +86,7 @@ export default function Dashboard() {
           <TabsContent value="payment" className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Payment Form */}
-              {clientSecret && (
-                <Elements stripe={stripePromise} options={stripeOptions}>
-                  <PaymentForm onPaymentSuccess={handlePaymentSuccess} />
-                </Elements>
-              )}
+              <PaymentFormWrapper onPaymentSuccess={handlePaymentSuccess} />
 
               {/* Payment Status */}
               <Card>

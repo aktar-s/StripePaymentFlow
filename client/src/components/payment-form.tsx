@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
+import { useState, useEffect } from 'react';
+import { useStripe, useElements, PaymentElement, Elements } from '@stripe/react-stripe-js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { stripePromise } from '@/lib/stripe';
 import { CreditCard, Info, Lock } from 'lucide-react';
 import type { PaymentFormData } from '@/types/stripe';
 
@@ -14,7 +15,7 @@ interface PaymentFormProps {
   onPaymentSuccess: (paymentIntentId: string) => void;
 }
 
-export function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
+function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -57,6 +58,18 @@ export function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
       // Create payment intent
       const response = await apiRequest('POST', '/api/create-payment-intent', formData);
       const { clientSecret } = await response.json();
+
+      // Submit the elements to validate before confirming payment
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        toast({
+          title: "Payment Error",
+          description: submitError.message,
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        return;
+      }
 
       // Confirm payment
       const { error, paymentIntent } = await stripe.confirmPayment({
@@ -185,5 +198,50 @@ export function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+// Wrapper component that provides clientSecret to Elements
+export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
+  const [clientSecret, setClientSecret] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const createPaymentIntent = async () => {
+      try {
+        const response = await apiRequest('POST', '/api/create-payment-intent', {
+          amount: 1.00,
+          description: 'Test payment',
+          customerEmail: '',
+        });
+        const { clientSecret } = await response.json();
+        setClientSecret(clientSecret);
+      } catch (error) {
+        console.error('Error creating payment intent:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    createPaymentIntent();
+  }, []);
+
+  if (isLoading || !clientSecret) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <span className="ml-2">Loading payment form...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Elements stripe={stripePromise} options={{ clientSecret }}>
+      <PaymentForm onPaymentSuccess={onPaymentSuccess} />
+    </Elements>
   );
 }
