@@ -6,6 +6,7 @@ export interface IStorage {
   getPayment(id: number): Promise<Payment | undefined>;
   getPaymentByIntentId(paymentIntentId: string): Promise<Payment | undefined>;
   updatePayment(id: number, updates: Partial<Payment>): Promise<Payment | undefined>;
+  deletePayment(id: number): Promise<boolean>;
   listPayments(limit?: number, offset?: number): Promise<Payment[]>;
   
   // Refund methods

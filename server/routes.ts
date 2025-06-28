@@ -239,6 +239,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear test payments with requires_payment_method status
+  app.delete("/api/clear-test-payments", async (req, res) => {
+    try {
+      const payments = await storage.listPayments();
+      const testPayments = payments.filter(p => p.status === 'requires_payment_method');
+      
+      for (const payment of testPayments) {
+        await storage.deletePayment(payment.id);
+      }
+      
+      res.json({ message: `Cleared ${testPayments.length} test payments` });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error clearing test payments: " + error.message });
+    }
+  });
+
   // Stripe webhook endpoint
   app.post("/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
     if (!webhookSecret) {

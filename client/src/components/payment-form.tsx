@@ -210,47 +210,179 @@ function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
   );
 }
 
-// Wrapper component that provides clientSecret to Elements
+// Payment form that only creates payment intents when user submits
+function PaymentSetupForm({ onPaymentSuccess }: PaymentFormProps) {
+  const { toast } = useToast();
+  const [isCreating, setIsCreating] = useState(false);
+  const [formData, setFormData] = useState<PaymentFormData>({
+    amount: 1.00,
+    description: 'Test payment',
+    customerEmail: '',
+  });
+
+  const handleInputChange = (field: keyof PaymentFormData, value: string | number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreatePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (formData.amount < 0.5) {
+      toast({
+        title: "Invalid Amount",
+        description: "Minimum amount is £0.50",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const response = await apiRequest('POST', '/api/create-payment-intent', formData);
+      const { clientSecret } = await response.json();
+      
+      // Redirect to payment form with client secret
+      window.location.hash = `#payment-${clientSecret}`;
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5" />
+          Create New Payment
+        </CardTitle>
+        <CardDescription>
+          Set up a payment amount and proceed to secure checkout
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleCreatePayment} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="amount">Amount (GBP)</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">£</span>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                min="0.50"
+                value={formData.amount}
+                onChange={(e) => handleInputChange('amount', parseFloat(e.target.value))}
+                className="pl-8"
+                placeholder="1.00"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Minimum amount: £0.50</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Input
+              id="description"
+              value={formData.description}
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              placeholder="Payment description"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Customer Email (optional)</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.customerEmail}
+              onChange={(e) => handleInputChange('customerEmail', e.target.value)}
+              placeholder="customer@example.com"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={isCreating}
+            className="w-full"
+          >
+            {isCreating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                Creating Payment...
+              </>
+            ) : (
+              <>
+                <Lock className="h-4 w-4 mr-2" />
+                Create Payment
+              </>
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Wrapper that shows either setup form or payment form based on URL
 export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
   const [clientSecret, setClientSecret] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const createPaymentIntent = async () => {
-      try {
-        const response = await apiRequest('POST', '/api/create-payment-intent', {
-          amount: 1.00,
-          description: 'Test payment',
-          customerEmail: '',
-        });
-        const { clientSecret } = await response.json();
-        setClientSecret(clientSecret);
-      } catch (error) {
-        console.error('Error creating payment intent:', error);
-      } finally {
-        setIsLoading(false);
+    // Check if we have a client secret in the URL hash
+    const hash = window.location.hash;
+    if (hash.startsWith('#payment-')) {
+      const secret = hash.replace('#payment-', '');
+      setClientSecret(secret);
+    }
+
+    // Listen for hash changes
+    const handleHashChange = () => {
+      const newHash = window.location.hash;
+      if (newHash.startsWith('#payment-')) {
+        const secret = newHash.replace('#payment-', '');
+        setClientSecret(secret);
+      } else {
+        setClientSecret('');
       }
     };
 
-    createPaymentIntent();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  if (isLoading || !clientSecret) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            <span className="ml-2">Loading payment form...</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  const handlePaymentSuccess = (paymentIntentId: string) => {
+    // Clear the hash and return to setup form
+    window.location.hash = '';
+    setClientSecret('');
+    onPaymentSuccess(paymentIntentId);
+  };
+
+  if (!clientSecret) {
+    return <PaymentSetupForm onPaymentSuccess={onPaymentSuccess} />;
   }
 
   return (
-    <Elements stripe={stripePromise} options={{ clientSecret }}>
-      <PaymentForm onPaymentSuccess={onPaymentSuccess} />
-    </Elements>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <button 
+          onClick={() => {
+            window.location.hash = '';
+            setClientSecret('');
+          }}
+          className="text-primary hover:underline"
+        >
+          ← Back to setup
+        </button>
+      </div>
+      <Elements stripe={stripePromise} options={{ clientSecret }}>
+        <PaymentForm onPaymentSuccess={handlePaymentSuccess} />
+      </Elements>
+    </div>
   );
 }
