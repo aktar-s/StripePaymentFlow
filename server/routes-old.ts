@@ -1,6 +1,6 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
 import express from "express";
+import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { insertPaymentSchema, insertRefundSchema } from "@shared/schema";
@@ -22,7 +22,7 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 // Default to test mode for safety
 let currentMode: 'test' | 'live' = 'test';
 let currentStripe = new Stripe(testSecretKey, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2023-10-16",
 });
 
 // Function to switch Stripe mode safely
@@ -35,7 +35,7 @@ function switchStripeMode(mode: 'test' | 'live') {
   console.log(`🔑 Public key available: ${mode === 'live' ? !!livePublicKey : !!testPublicKey}`);
   
   currentStripe = new Stripe(secretKey!, {
-    apiVersion: "2024-06-20",
+    apiVersion: "2023-10-16",
   });
   
   return {
@@ -122,19 +122,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Store payment in database
-      const payment = await storage.createPayment({
+      await storage.createPayment({
         paymentIntentId: paymentIntent.id,
-        amount,
+        amount: Math.round(amount * 100),
         currency,
         status: paymentIntent.status,
-        description: description || null,
         customerEmail: customerEmail || null,
-        isLiveMode: currentMode === 'live',
+        description: description || null,
+        isLiveMode,
+        cardLast4: null,
+        paymentMethodType: null,
+        stripeFee: null,
       });
 
       res.json({ 
         clientSecret: paymentIntent.client_secret,
-        paymentId: payment.id
+        paymentIntentId: paymentIntent.id 
       });
     } catch (error: any) {
       console.error("Error creating payment intent:", error);
@@ -149,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { paymentIntentId } = req.params;
       
-      const paymentIntent = await currentStripe.paymentIntents.retrieve(paymentIntentId);
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       const payment = await storage.getPaymentByIntentId(paymentIntentId);
 
       if (!payment) {
@@ -178,7 +181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the latest payment status from Stripe
-      const paymentIntent = await currentStripe.paymentIntents.retrieve(paymentIntentId);
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       const payment = await storage.getPaymentByIntentId(paymentIntentId);
 
       if (!payment) {
@@ -190,21 +193,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let paymentMethodType = null;
       let stripeFee = null;
 
-      if (paymentIntent.status === 'succeeded' && paymentIntent.charges?.data?.length > 0) {
-        const charge = paymentIntent.charges.data[0];
-        
-        if (charge.payment_method_details?.card) {
-          cardLast4 = charge.payment_method_details.card.last4;
-          paymentMethodType = charge.payment_method_details.card.brand;
-        }
-        
-        if (charge.balance_transaction) {
-          const balanceTransaction = await currentStripe.balanceTransactions.retrieve(charge.balance_transaction as string);
-          stripeFee = balanceTransaction.fee;
-        }
+      if (paymentIntent.status === 'succeeded' && paymentIntent.latest_charge) {
+        const charge = await stripe.charges.retrieve(paymentIntent.latest_charge as string);
+        cardLast4 = charge.payment_method_details?.card?.last4 || null;
+        paymentMethodType = charge.payment_method_details?.type || null;
+        stripeFee = charge.balance_transaction ? (charge.balance_transaction as any).fee : null;
       }
 
-      // Update payment status in database
+      // Update payment in database
       const updatedPayment = await storage.updatePayment(payment.id, {
         status: paymentIntent.status,
         cardLast4,
@@ -214,12 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        payment: updatedPayment,
-        paymentIntent: {
-          id: paymentIntent.id,
-          status: paymentIntent.status,
-          amount: paymentIntent.amount,
-        }
+        payment: updatedPayment 
       });
     } catch (error: any) {
       console.error("Error updating payment status:", error);
@@ -229,7 +220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // List all payments
+  // List payments
   app.get("/api/payments", async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
@@ -275,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         refundParams.amount = Math.round(amount * 100); // Convert to pence
       }
 
-      const refund = await currentStripe.refunds.create(refundParams);
+      const refund = await stripe.refunds.create(refundParams);
 
       // Store refund in database
       const storedRefund = await storage.createRefund({
@@ -287,10 +278,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reason,
         status: refund.status || "processing",
         notes: notes || null,
-        isLiveMode: currentMode === 'live',
+        isLiveMode,
       });
 
-      res.json({ refund: storedRefund });
+      res.json({ refund, storedRefund });
     } catch (error: any) {
       console.error("Error creating refund:", error);
       res.status(500).json({ 
@@ -299,10 +290,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get refunds by payment intent ID
+  // Get refunds for payment
   app.get("/api/refunds/:paymentIntentId", async (req, res) => {
     try {
-      const refunds = await storage.getRefundsByPaymentIntentId(req.params.paymentIntentId);
+      const { paymentIntentId } = req.params;
+      const refunds = await storage.getRefundsByPaymentIntentId(paymentIntentId);
       res.json(refunds);
     } catch (error: any) {
       console.error("Error getting refunds:", error);
@@ -355,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let event: Stripe.Event;
 
     try {
-      event = currentStripe.webhooks.constructEvent(req.body, sig as string, webhookSecret);
+      event = stripe.webhooks.constructEvent(req.body, sig as string, webhookSecret);
     } catch (err: any) {
       console.error(`Webhook signature verification failed:`, err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -368,37 +360,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         eventType: event.type,
         data: JSON.stringify(event.data),
         processed: false,
-        isLiveMode: currentMode === 'live',
+        isLiveMode,
       });
 
       // Handle the event
       switch (event.type) {
         case 'payment_intent.succeeded':
           const paymentIntentSucceeded = event.data.object as Stripe.PaymentIntent;
-          // Update payment status in database
           const payment = await storage.getPaymentByIntentId(paymentIntentSucceeded.id);
           if (payment) {
+            // Get latest charge details from Stripe
+            const charges = await stripe.charges.list({
+              payment_intent: paymentIntentSucceeded.id,
+              limit: 1,
+            });
+            
+            const charge = charges.data[0];
             await storage.updatePayment(payment.id, {
               status: 'succeeded',
+              cardLast4: charge?.payment_method_details?.card?.last4 || null,
+              paymentMethodType: charge?.payment_method_details?.type || null,
+              stripeFee: charge?.balance_transaction ? 
+                (charge.balance_transaction as any).fee : null,
             });
           }
           break;
 
         case 'payment_intent.payment_failed':
           const paymentIntentFailed = event.data.object as Stripe.PaymentIntent;
-          // Update payment status in database
           const failedPayment = await storage.getPaymentByIntentId(paymentIntentFailed.id);
           if (failedPayment) {
             await storage.updatePayment(failedPayment.id, {
               status: 'failed',
             });
           }
-          break;
-
-        case 'refund.created':
-          const refundCreated = event.data.object as Stripe.Refund;
-          // Update refund status in database
-          // Note: In a real implementation, you'd find the refund by ID and update it
           break;
 
         case 'refund.updated':
@@ -418,6 +413,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error processing webhook:", error);
       res.status(500).json({ error: "Error processing webhook" });
     }
+  });
+
+  // Get Stripe mode status
+  app.get("/api/stripe-status", (req, res) => {
+    res.json({
+      isLiveMode,
+      hasKeys: !!process.env.STRIPE_SECRET_KEY_LIVE,
+    });
   });
 
   const httpServer = createServer(app);

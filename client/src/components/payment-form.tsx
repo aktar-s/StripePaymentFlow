@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import { stripePromise } from '@/lib/stripe';
+import { getStripePromise } from '@/lib/stripe';
 import { CreditCard, Info, Lock } from 'lucide-react';
 import type { PaymentFormData } from '@/types/stripe';
 
@@ -332,8 +332,12 @@ function PaymentSetupForm({ onPaymentSuccess }: PaymentFormProps) {
 // Wrapper that shows either setup form or payment form based on URL
 export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
   const [clientSecret, setClientSecret] = useState<string>('');
+  const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
 
   useEffect(() => {
+    // Initialize Stripe promise when component mounts
+    getStripePromise().then(setStripePromise);
+
     // Check if we have a client secret in the URL hash
     const hash = window.location.hash;
     if (hash.startsWith('#payment-')) {
@@ -365,6 +369,19 @@ export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
 
   if (!clientSecret) {
     return <PaymentSetupForm onPaymentSuccess={onPaymentSuccess} />;
+  }
+
+  if (!stripePromise) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <span className="ml-2">Loading Stripe...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

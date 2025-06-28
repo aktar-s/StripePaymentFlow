@@ -1,10 +1,24 @@
 import { loadStripe } from '@stripe/stripe-js';
+import { apiRequest } from './queryClient';
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY_LIVE) {
-  throw new Error('Missing required environment variable: VITE_STRIPE_PUBLIC_KEY_LIVE');
-}
+// Dynamic Stripe instance that changes based on current mode
+let stripePromise: Promise<any> | null = null;
 
-export const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY_LIVE);
+export const getStripePromise = async () => {
+  try {
+    const response = await apiRequest('GET', '/api/stripe-public-key');
+    const data = await response.json();
+    
+    console.log(`🔑 FRONTEND: Using ${data.mode.toUpperCase()} mode key: ${data.publicKey.substring(0, 12)}...`);
+    
+    // Create new Stripe instance with the current mode's key
+    stripePromise = loadStripe(data.publicKey);
+    return stripePromise;
+  } catch (error) {
+    console.error('Failed to get Stripe public key:', error);
+    throw new Error('Unable to initialize Stripe. Please check your configuration.');
+  }
+};
 
 export const formatCurrency = (amount: number, currency = 'GBP'): string => {
   return new Intl.NumberFormat('en-GB', {
