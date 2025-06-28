@@ -234,6 +234,7 @@ export class PersistentStorage implements IStorage {
       createdAt: now 
     };
     this.webhookEvents.set(insertEvent.eventId, event);
+    this.saveData();
     return event;
   }
 
@@ -245,6 +246,7 @@ export class PersistentStorage implements IStorage {
     const event = this.webhookEvents.get(eventId);
     if (event) {
       this.webhookEvents.set(eventId, { ...event, processed: true });
+      this.saveData();
     }
   }
 }
