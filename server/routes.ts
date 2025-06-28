@@ -347,24 +347,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const existingPayment = await storage.getPaymentByIntentId(pi.id);
         
         if (!existingPayment) {
-          // Extract payment method info if available
-          let cardLast4 = null;
-          let paymentMethodType = null;
-          
-          // Get basic charge details if available
-          if (pi.latest_charge) {
-            try {
-              const charge = await currentStripe.charges.retrieve(pi.latest_charge as string);
-              
-              if (charge.payment_method_details?.card) {
-                cardLast4 = charge.payment_method_details.card.last4;
-                paymentMethodType = charge.payment_method_details.card.brand;
-              }
-            } catch (chargeError) {
-              console.warn(`Could not retrieve charge details for ${pi.id}:`, chargeError);
-            }
-          }
-          
           const paymentData = {
             paymentIntentId: pi.id,
             amount: pi.amount / 100, // Convert from cents
@@ -372,14 +354,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: pi.status,
             description: pi.description || null,
             customerEmail: pi.receipt_email || null,
-            cardLast4,
-            paymentMethodType,
-            stripeFee: null, // Would need separate API call for exact fee
+            cardLast4: null, // Will be populated by webhook or payment confirmation
+            paymentMethodType: null,
+            stripeFee: null,
             isLiveMode: currentMode === 'live'
           };
           
           await storage.createPayment(paymentData);
           syncedPayments++;
+          console.log(`📦 Synced payment: ${pi.id} - ${pi.amount / 100} ${pi.currency}`);
         }
       }
       
@@ -413,6 +396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             await storage.createRefund(refundData);
             syncedRefunds++;
+            console.log(`💰 Synced refund: ${refund.id} - ${refund.amount / 100} ${refund.currency}`);
           }
         }
       }
