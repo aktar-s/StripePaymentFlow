@@ -94,6 +94,17 @@ export default function Dashboard() {
             
             {/* Mode Toggle */}
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncHistoryMutation.mutate()}
+                disabled={syncHistoryMutation.isPending}
+                className="flex items-center space-x-2"
+              >
+                <Download className="h-4 w-4" />
+                <span>{syncHistoryMutation.isPending ? 'Syncing...' : 'Sync History'}</span>
+              </Button>
+              
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium text-gray-700">Mode:</span>
                 <Select 

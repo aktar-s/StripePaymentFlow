@@ -339,8 +339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sync Payment Intents
       console.log(`📥 Fetching payment intents from Stripe (${currentMode} mode)...`);
       const paymentIntents = await currentStripe.paymentIntents.list({ 
-        limit: 100,
-        expand: ['data.charges.data.payment_method']
+        limit: 100
       });
       
       for (const pi of paymentIntents.data) {
@@ -352,11 +351,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let cardLast4 = null;
           let paymentMethodType = null;
           
-          if (pi.charges?.data?.[0]?.payment_method) {
-            const pm = pi.charges.data[0].payment_method;
-            if (typeof pm === 'object' && pm !== null && 'card' in pm && pm.card) {
-              cardLast4 = pm.card.last4;
-              paymentMethodType = pm.type;
+          // Get basic charge details if available
+          if (pi.latest_charge) {
+            try {
+              const charge = await currentStripe.charges.retrieve(pi.latest_charge as string);
+              
+              if (charge.payment_method_details?.card) {
+                cardLast4 = charge.payment_method_details.card.last4;
+                paymentMethodType = charge.payment_method_details.card.brand;
+              }
+            } catch (chargeError) {
+              console.warn(`Could not retrieve charge details for ${pi.id}:`, chargeError);
             }
           }
           
@@ -381,8 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sync Refunds
       console.log(`📥 Fetching refunds from Stripe (${currentMode} mode)...`);
       const refunds = await currentStripe.refunds.list({ 
-        limit: 100,
-        expand: ['data.charge.payment_intent']
+        limit: 100
       });
       
       for (const refund of refunds.data) {
