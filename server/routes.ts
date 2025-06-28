@@ -328,6 +328,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sync historical data from Stripe
+  app.post("/api/sync-stripe-history", async (req, res) => {
+    try {
+      console.log("🔄 Starting Stripe historical data sync...");
+      
+      let syncedPayments = 0;
+      let syncedRefunds = 0;
+      
+      // Sync Payment Intents
+      console.log(`📥 Fetching payment intents from Stripe (${currentMode} mode)...`);
+      const paymentIntents = await currentStripe.paymentIntents.list({ 
+        limit: 100,
+        expand: ['data.charges.data.payment_method']
+      });
+      
+      for (const pi of paymentIntents.data) {
+        // Check if payment already exists
+        const existingPayment = await storage.getPaymentByIntentId(pi.id);
+        
+        if (!existingPayment) {
+          // Extract payment method info if available
+          let cardLast4 = null;
+          let paymentMethodType = null;
+          
+          if (pi.charges?.data?.[0]?.payment_method) {
+            const pm = pi.charges.data[0].payment_method;
+            if (typeof pm === 'object' && pm !== null && 'card' in pm && pm.card) {
+              cardLast4 = pm.card.last4;
+              paymentMethodType = pm.type;
+            }
+          }
+          
+          const paymentData = {
+            paymentIntentId: pi.id,
+            amount: pi.amount / 100, // Convert from cents
+            currency: pi.currency,
+            status: pi.status,
+            description: pi.description || null,
+            customerEmail: pi.receipt_email || null,
+            cardLast4,
+            paymentMethodType,
+            stripeFee: null, // Would need separate API call for exact fee
+            isLiveMode: currentMode === 'live'
+          };
+          
+          await storage.createPayment(paymentData);
+          syncedPayments++;
+        }
+      }
+      
+      // Sync Refunds
+      console.log(`📥 Fetching refunds from Stripe (${currentMode} mode)...`);
+      const refunds = await currentStripe.refunds.list({ 
+        limit: 100,
+        expand: ['data.charge.payment_intent']
+      });
+      
+      for (const refund of refunds.data) {
+        // Check if refund already exists
+        const existingRefunds = await storage.getRefundsByPaymentIntentId(refund.payment_intent as string);
+        const alreadyExists = existingRefunds.some(r => r.refundId === refund.id);
+        
+        if (!alreadyExists) {
+          // Find the corresponding payment in our database
+          const payment = await storage.getPaymentByIntentId(refund.payment_intent as string);
+          
+          if (payment) {
+            const refundData = {
+              paymentId: payment.id,
+              paymentIntentId: refund.payment_intent as string,
+              refundId: refund.id,
+              amount: refund.amount / 100, // Convert from cents
+              currency: refund.currency,
+              status: refund.status || 'pending',
+              reason: (refund.reason as 'requested_by_customer' | 'duplicate' | 'fraudulent') || 'requested_by_customer',
+              notes: refund.metadata?.notes || null,
+              isLiveMode: currentMode === 'live'
+            };
+            
+            await storage.createRefund(refundData);
+            syncedRefunds++;
+          }
+        }
+      }
+      
+      console.log(`✅ Sync complete: ${syncedPayments} payments, ${syncedRefunds} refunds`);
+      
+      res.json({
+        success: true,
+        syncedPayments,
+        syncedRefunds,
+        mode: currentMode
+      });
+      
+    } catch (error: any) {
+      console.error("❌ Error syncing Stripe history:", error);
+      res.status(500).json({ 
+        message: "Error syncing Stripe history: " + error.message,
+        error: error.message 
+      });
+    }
+  });
+
   // Clear test payments with requires_payment_method status
   app.delete("/api/clear-test-payments", async (req, res) => {
     try {

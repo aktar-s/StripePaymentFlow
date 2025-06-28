@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PaymentFormWrapper } from '@/components/payment-form';
 import { TransactionHistory } from '@/components/transaction-history';
 import { RefundManagement } from '@/components/refund-management';
-import { CreditCard, List, RotateCcw, Shield, AlertTriangle } from 'lucide-react';
+import { CreditCard, List, RotateCcw, Shield, AlertTriangle, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import type { StripeConfig } from '@/types/stripe';
@@ -42,6 +42,28 @@ export default function Dashboard() {
       toast({
         title: "Mode Switch Failed",
         description: error.message || "Unable to switch Stripe mode",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const syncHistoryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/sync-stripe-history');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/refunds'] });
+      toast({
+        title: "History Synced",
+        description: `Retrieved ${data.syncedPayments} payments and ${data.syncedRefunds} refunds from Stripe`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Unable to sync historical data",
         variant: "destructive",
       });
     },
