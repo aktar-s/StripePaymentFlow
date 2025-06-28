@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,16 @@ export function RefundManagement({ selectedPaymentIntentId }: RefundManagementPr
     paymentIntentId: selectedPaymentIntentId || '',
     reason: 'requested_by_customer',
   });
+
+  // Update form when selectedPaymentIntentId changes
+  useEffect(() => {
+    if (selectedPaymentIntentId) {
+      setFormData(prev => ({
+        ...prev,
+        paymentIntentId: selectedPaymentIntentId
+      }));
+    }
+  }, [selectedPaymentIntentId]);
 
   const { data: refunds, isLoading } = useQuery<Refund[]>({
     queryKey: ['/api/refunds'],
@@ -55,7 +65,7 @@ export function RefundManagement({ selectedPaymentIntentId }: RefundManagementPr
     },
   });
 
-  const handleInputChange = (field: keyof RefundFormData, value: string | number) => {
+  const handleInputChange = (field: keyof RefundFormData, value: string | number | undefined) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -121,7 +131,10 @@ export function RefundManagement({ selectedPaymentIntentId }: RefundManagementPr
                   step="0.01"
                   min="0.01"
                   value={formData.amount || ''}
-                  onChange={(e) => handleInputChange('amount', parseFloat(e.target.value) || undefined)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleInputChange('amount', value ? parseFloat(value) : undefined);
+                  }}
                   className="pl-8"
                   placeholder="Leave empty for full refund"
                 />
