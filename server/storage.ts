@@ -1,3 +1,5 @@
+import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { payments, refunds, webhookEvents, type Payment, type InsertPayment, type Refund, type InsertRefund, type WebhookEvent, type InsertWebhookEvent } from "@shared/schema";
 
 export interface IStorage {
@@ -23,19 +25,90 @@ export interface IStorage {
   markWebhookEventProcessed(eventId: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
+interface StorageData {
+  payments: Payment[];
+  refunds: Refund[];
+  webhookEvents: WebhookEvent[];
+  currentPaymentId: number;
+  currentRefundId: number;
+}
+
+export class PersistentStorage implements IStorage {
   private payments: Map<number, Payment>;
   private refunds: Map<number, Refund>;
   private webhookEvents: Map<string, WebhookEvent>;
   private currentPaymentId: number;
   private currentRefundId: number;
+  private dataFile: string;
 
   constructor() {
+    this.dataFile = join(process.cwd(), 'storage-data.json');
     this.payments = new Map();
     this.refunds = new Map();
     this.webhookEvents = new Map();
     this.currentPaymentId = 1;
     this.currentRefundId = 1;
+    
+    this.loadData();
+  }
+
+  private loadData(): void {
+    try {
+      if (existsSync(this.dataFile)) {
+        const rawData = readFileSync(this.dataFile, 'utf8');
+        const data: StorageData = JSON.parse(rawData);
+        
+        // Load payments
+        data.payments.forEach(payment => {
+          this.payments.set(payment.id, {
+            ...payment,
+            createdAt: new Date(payment.createdAt),
+            updatedAt: new Date(payment.updatedAt)
+          });
+        });
+        
+        // Load refunds
+        data.refunds.forEach(refund => {
+          this.refunds.set(refund.id, {
+            ...refund,
+            createdAt: new Date(refund.createdAt),
+            updatedAt: new Date(refund.updatedAt)
+          });
+        });
+        
+        // Load webhook events
+        data.webhookEvents.forEach(event => {
+          this.webhookEvents.set(event.eventId, {
+            ...event,
+            createdAt: new Date(event.createdAt)
+          });
+        });
+        
+        this.currentPaymentId = data.currentPaymentId || 1;
+        this.currentRefundId = data.currentRefundId || 1;
+        
+        console.log(`📁 Loaded ${data.payments.length} payments and ${data.refunds.length} refunds from storage`);
+      }
+    } catch (error) {
+      console.error('Error loading storage data:', error);
+      // Continue with empty storage if load fails
+    }
+  }
+
+  private saveData(): void {
+    try {
+      const data: StorageData = {
+        payments: Array.from(this.payments.values()),
+        refunds: Array.from(this.refunds.values()),
+        webhookEvents: Array.from(this.webhookEvents.values()),
+        currentPaymentId: this.currentPaymentId,
+        currentRefundId: this.currentRefundId
+      };
+      
+      writeFileSync(this.dataFile, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error('Error saving storage data:', error);
+    }
   }
 
   // Payment methods
@@ -56,6 +129,7 @@ export class MemStorage implements IStorage {
       updatedAt: now 
     };
     this.payments.set(id, payment);
+    this.saveData();
     return payment;
   }
 
@@ -79,11 +153,14 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.payments.set(id, updatedPayment);
+    this.saveData();
     return updatedPayment;
   }
 
   async deletePayment(id: number): Promise<boolean> {
-    return this.payments.delete(id);
+    const deleted = this.payments.delete(id);
+    if (deleted) this.saveData();
+    return deleted;
   }
 
   async listPayments(limit = 50, offset = 0): Promise<Payment[]> {
@@ -106,6 +183,7 @@ export class MemStorage implements IStorage {
       updatedAt: now 
     };
     this.refunds.set(id, refund);
+    this.saveData();
     return refund;
   }
 
@@ -129,6 +207,7 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.refunds.set(id, updatedRefund);
+    this.saveData();
     return updatedRefund;
   }
 
@@ -170,4 +249,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new PersistentStorage();
