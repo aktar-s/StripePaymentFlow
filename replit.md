@@ -118,4 +118,13 @@ Application is ready for live deployment with:
 3. Complete refund management system
 4. Proper status tracking and transaction history
 
+## Issue Resolution
+
+**June 28, 2025 - Fixed Automatic Payment Creation Bug:**
+- User reported unexpected test payments appearing automatically
+- Root cause: Payment intents were being created on component load instead of user action
+- Solution: Implemented two-step payment process (setup form → secure checkout)
+- Result: Payments now only created when user explicitly clicks "Create Payment"
+- Cleared unwanted test payments from transaction history
+
 ## Project Status: COMPLETE ✓

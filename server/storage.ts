@@ -81,6 +81,10 @@ export class MemStorage implements IStorage {
     return updatedPayment;
   }
 
+  async deletePayment(id: number): Promise<boolean> {
+    return this.payments.delete(id);
+  }
+
   async listPayments(limit = 50, offset = 0): Promise<Payment[]> {
     const allPayments = Array.from(this.payments.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
