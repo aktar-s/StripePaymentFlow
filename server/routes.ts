@@ -27,7 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { amount, currency = "gbp", description, customerEmail } = req.body;
       
-      if (!amount || amount < 50) { // Minimum 50 pence
+      if (!amount || amount < 0.50) { // Minimum 50 pence
         return res.status(400).json({ error: "Amount must be at least £0.50" });
       }
 
@@ -223,12 +223,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const paymentIntentSucceeded = event.data.object as Stripe.PaymentIntent;
           const payment = await storage.getPaymentByIntentId(paymentIntentSucceeded.id);
           if (payment) {
+            // Get latest charge details from Stripe
+            const charges = await stripe.charges.list({
+              payment_intent: paymentIntentSucceeded.id,
+              limit: 1,
+            });
+            
+            const charge = charges.data[0];
             await storage.updatePayment(payment.id, {
               status: 'succeeded',
-              cardLast4: paymentIntentSucceeded.charges?.data[0]?.payment_method_details?.card?.last4 || null,
-              paymentMethodType: paymentIntentSucceeded.charges?.data[0]?.payment_method_details?.type || null,
-              stripeFee: paymentIntentSucceeded.charges?.data[0]?.balance_transaction ? 
-                (paymentIntentSucceeded.charges.data[0].balance_transaction as any).fee : null,
+              cardLast4: charge?.payment_method_details?.card?.last4 || null,
+              paymentMethodType: charge?.payment_method_details?.type || null,
+              stripeFee: charge?.balance_transaction ? 
+                (charge.balance_transaction as any).fee : null,
             });
           }
           break;
