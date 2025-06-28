@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { getStripePromise } from '@/lib/stripe';
-import { CreditCard, Info, Lock } from 'lucide-react';
-import type { PaymentFormData } from '@/types/stripe';
+import { CreditCard, Info, Lock, Shield, AlertTriangle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import type { PaymentFormData, StripeConfig } from '@/types/stripe';
 
 interface PaymentFormProps {
   onPaymentSuccess: (paymentIntentId: string) => void;
@@ -25,6 +27,12 @@ function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
     amount: 1.00,
     description: 'Test payment',
     customerEmail: '',
+  });
+
+  // Get current Stripe configuration
+  const { data: stripeConfig } = useQuery<StripeConfig>({
+    queryKey: ['/api/stripe-status'],
+    refetchInterval: 5000,
   });
 
   const handleInputChange = (field: keyof PaymentFormData, value: string | number) => {
@@ -174,18 +182,45 @@ function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
             </div>
           </div>
 
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              <div className="text-sm space-y-1">
-                <p className="font-medium">Test Cards (Test Mode Only):</p>
-                <p><strong>Success:</strong> 4242 4242 4242 4242</p>
-                <p><strong>Decline:</strong> 4000 0000 0000 0002</p>
-                <p><strong>3D Secure:</strong> 4000 0025 0000 3155</p>
-                <p>Use any future expiry date and any 3-digit CVC</p>
-              </div>
-            </AlertDescription>
-          </Alert>
+          {/* Show appropriate instructions based on mode */}
+          {stripeConfig?.isLiveMode ? (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-red-700">Live Mode Active</p>
+                  <p className="text-red-600">Real money will be charged. Use your actual card details.</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="destructive" className="text-xs">
+                      LIVE MODE
+                    </Badge>
+                    <span className="text-xs text-red-600">Real transactions</span>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="border-blue-200 bg-blue-50">
+              <Shield className="h-4 w-4" />
+              <AlertDescription>
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-blue-700">Test Mode - Safe for Testing</p>
+                  <div className="space-y-1 text-blue-600">
+                    <p><strong>Success:</strong> 4242 4242 4242 4242</p>
+                    <p><strong>Decline:</strong> 4000 0000 0000 0002</p>
+                    <p><strong>3D Secure:</strong> 4000 0025 0000 3155</p>
+                    <p>Use any future expiry date and any 3-digit CVC</p>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="secondary" className="text-xs">
+                      TEST MODE
+                    </Badge>
+                    <span className="text-xs text-blue-600">No real money charged</span>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <Button
             type="submit"
@@ -333,11 +368,38 @@ function PaymentSetupForm({ onPaymentSuccess }: PaymentFormProps) {
 export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
   const [clientSecret, setClientSecret] = useState<string>('');
   const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
+  const [stripeKey, setStripeKey] = useState<string>('');
+
+  // Get current Stripe configuration
+  const { data: stripeConfig } = useQuery<StripeConfig>({
+    queryKey: ['/api/stripe-status'],
+    refetchInterval: 5000,
+  });
 
   useEffect(() => {
-    // Initialize Stripe promise when component mounts
-    getStripePromise().then(setStripePromise);
+    // Reinitialize Stripe when mode changes
+    if (stripeConfig) {
+      console.log('🔄 Stripe mode changed, reinitializing...');
+      // Force a new Stripe promise to ensure clean state
+      setStripePromise(null);
+      
+      // Clear any existing payment if mode switched
+      if (clientSecret) {
+        console.log('🗑️ Clearing payment due to mode change');
+        setClientSecret('');
+        window.location.hash = '';
+      }
+      
+      // Get fresh Stripe promise after a brief delay
+      setTimeout(() => {
+        getStripePromise().then((promise) => {
+          setStripePromise(promise);
+        });
+      }, 100);
+    }
+  }, [stripeConfig?.isLiveMode]);
 
+  useEffect(() => {
     // Check if we have a client secret in the URL hash
     const hash = window.location.hash;
     if (hash.startsWith('#payment-')) {
@@ -397,7 +459,35 @@ export function PaymentFormWrapper({ onPaymentSuccess }: PaymentFormProps) {
           ← Back to setup
         </button>
       </div>
-      <Elements stripe={stripePromise} options={{ clientSecret }}>
+      
+      {/* Show mode indicator */}
+      {stripeConfig && (
+        <Alert className={stripeConfig.isLiveMode ? "border-red-200 bg-red-50" : "border-blue-200 bg-blue-50"}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="flex items-center gap-2">
+              {stripeConfig.isLiveMode ? (
+                <>
+                  <Badge variant="destructive" className="text-xs">LIVE MODE</Badge>
+                  <span className="text-red-600 text-sm">Real money will be charged</span>
+                </>
+              ) : (
+                <>
+                  <Badge variant="secondary" className="text-xs">TEST MODE</Badge>
+                  <span className="text-blue-600 text-sm">Safe for testing</span>
+                </>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Use a key to force Elements component to remount when mode changes */}
+      <Elements 
+        key={`${stripeConfig?.isLiveMode ? 'live' : 'test'}-${clientSecret}`}
+        stripe={stripePromise} 
+        options={{ clientSecret }}
+      >
         <PaymentForm onPaymentSuccess={handlePaymentSuccess} />
       </Elements>
     </div>

@@ -1,6 +1,13 @@
 export interface StripeConfig {
+  mode: 'test' | 'live';
   isLiveMode: boolean;
   hasKeys: boolean;
+  secretKeyPrefix?: string;
+  publicKeyAvailable?: boolean;
+  keyDetails?: {
+    testKeysAvailable: boolean;
+    liveKeysAvailable: boolean;
+  };
 }
 
 export interface PaymentFormData {
