@@ -41,7 +41,14 @@ export class MemStorage implements IStorage {
     const id = this.currentPaymentId++;
     const now = new Date();
     const payment: Payment = { 
-      ...insertPayment, 
+      ...insertPayment,
+      currency: insertPayment.currency || "gbp",
+      description: insertPayment.description || null,
+      customerEmail: insertPayment.customerEmail || null,
+      cardLast4: insertPayment.cardLast4 || null,
+      paymentMethodType: insertPayment.paymentMethodType || null,
+      stripeFee: insertPayment.stripeFee || null,
+      isLiveMode: insertPayment.isLiveMode || false,
       id, 
       createdAt: now, 
       updatedAt: now 
@@ -84,7 +91,10 @@ export class MemStorage implements IStorage {
     const id = this.currentRefundId++;
     const now = new Date();
     const refund: Refund = { 
-      ...insertRefund, 
+      ...insertRefund,
+      currency: insertRefund.currency || "gbp",
+      notes: insertRefund.notes || null,
+      isLiveMode: insertRefund.isLiveMode || false,
       id, 
       createdAt: now, 
       updatedAt: now 
@@ -119,7 +129,9 @@ export class MemStorage implements IStorage {
   async createWebhookEvent(insertEvent: InsertWebhookEvent): Promise<WebhookEvent> {
     const now = new Date();
     const event: WebhookEvent = { 
-      ...insertEvent, 
+      ...insertEvent,
+      isLiveMode: insertEvent.isLiveMode || false,
+      processed: insertEvent.processed || false,
       id: this.webhookEvents.size + 1,
       createdAt: now 
     };
