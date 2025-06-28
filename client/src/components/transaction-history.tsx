@@ -194,7 +194,7 @@ export function TransactionHistory({ onRefundClick }: TransactionHistoryProps) {
                               View
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
+                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
                             <DialogHeader>
                               <DialogTitle>Payment Details</DialogTitle>
                               <DialogDescription>
@@ -202,72 +202,76 @@ export function TransactionHistory({ onRefundClick }: TransactionHistoryProps) {
                               </DialogDescription>
                             </DialogHeader>
                             
-                            {isLoadingDetails ? (
-                              <div className="flex items-center justify-center py-8">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                                <span className="ml-2">Loading payment details...</span>
-                              </div>
-                            ) : paymentDetails ? (
-                              <div className="space-y-6">
-                                {/* Payment Overview */}
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                    <h4 className="font-semibold flex items-center gap-2">
-                                      <CreditCard className="h-4 w-4" />
-                                      Payment Information
-                                    </h4>
-                                    <div className="space-y-1 text-sm">
-                                      <div><strong>Amount:</strong> {formatCurrency(payment.amount)}</div>
-                                      <div><strong>Status:</strong> <Badge className={getStatusColor(payment.status)}>{payment.status}</Badge></div>
-                                      <div><strong>Currency:</strong> {payment.currency.toUpperCase()}</div>
-                                      <div><strong>Payment ID:</strong> <code className="text-xs">{payment.paymentIntentId}</code></div>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <h4 className="font-semibold flex items-center gap-2">
-                                      <User className="h-4 w-4" />
-                                      Customer Information
-                                    </h4>
-                                    <div className="space-y-1 text-sm">
-                                      <div><strong>Email:</strong> {payment.customerEmail || 'Not provided'}</div>
-                                      <div><strong>Payment Method:</strong> {paymentDetails.paymentIntent?.charges?.data?.[0]?.payment_method_details?.card?.brand || 'N/A'}</div>
-                                      <div><strong>Last 4 Digits:</strong> {paymentDetails.paymentIntent?.charges?.data?.[0]?.payment_method_details?.card?.last4 || 'N/A'}</div>
-                                    </div>
-                                  </div>
+                            <div className="overflow-y-auto max-h-[60vh] pr-2">
+                              {isLoadingDetails ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                                  <span className="ml-2">Loading payment details...</span>
                                 </div>
-
-                                {/* Transaction Details */}
-                                <div className="space-y-2">
-                                  <h4 className="font-semibold flex items-center gap-2">
-                                    <Calendar className="h-4 w-4" />
-                                    Transaction Details
-                                  </h4>
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div><strong>Created:</strong> {formatDate(payment.createdAt)}</div>
-                                    <div><strong>Mode:</strong> {payment.isLiveMode ? 'Live' : 'Test'}</div>
-                                    <div><strong>Description:</strong> {payment.description || 'No description'}</div>
-                                  </div>
-                                </div>
-
-                                {/* Stripe Details */}
-                                {paymentDetails.paymentIntent && (
-                                  <div className="space-y-2">
-                                    <h4 className="font-semibold flex items-center gap-2">
-                                      <FileText className="h-4 w-4" />
-                                      Stripe Details
-                                    </h4>
-                                    <div className="bg-muted p-3 rounded text-xs font-mono">
-                                      <pre>{JSON.stringify(paymentDetails.paymentIntent, null, 2)}</pre>
+                              ) : paymentDetails ? (
+                                <div className="space-y-6">
+                                  {/* Payment Overview */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <h4 className="font-semibold flex items-center gap-2">
+                                        <CreditCard className="h-4 w-4" />
+                                        Payment Information
+                                      </h4>
+                                      <div className="space-y-1 text-sm">
+                                        <div><strong>Amount:</strong> {formatCurrency(payment.amount)}</div>
+                                        <div><strong>Status:</strong> <Badge className={getStatusColor(payment.status)}>{payment.status}</Badge></div>
+                                        <div><strong>Currency:</strong> {payment.currency.toUpperCase()}</div>
+                                        <div><strong>Payment ID:</strong> <code className="text-xs bg-muted px-1 rounded">{payment.paymentIntentId}</code></div>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <h4 className="font-semibold flex items-center gap-2">
+                                        <User className="h-4 w-4" />
+                                        Customer Information
+                                      </h4>
+                                      <div className="space-y-1 text-sm">
+                                        <div><strong>Email:</strong> {payment.customerEmail || 'Not provided'}</div>
+                                        <div><strong>Payment Method:</strong> {paymentDetails.paymentIntent?.charges?.data?.[0]?.payment_method_details?.card?.brand || 'N/A'}</div>
+                                        <div><strong>Last 4 Digits:</strong> {paymentDetails.paymentIntent?.charges?.data?.[0]?.payment_method_details?.card?.last4 || 'N/A'}</div>
+                                      </div>
                                     </div>
                                   </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-center py-8">
-                                <p className="text-destructive">Failed to load payment details</p>
-                              </div>
-                            )}
+
+                                  {/* Transaction Details */}
+                                  <div className="space-y-2">
+                                    <h4 className="font-semibold flex items-center gap-2">
+                                      <Calendar className="h-4 w-4" />
+                                      Transaction Details
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div><strong>Created:</strong> {formatDate(payment.createdAt)}</div>
+                                      <div><strong>Mode:</strong> {payment.isLiveMode ? 'Live' : 'Test'}</div>
+                                      <div><strong>Description:</strong> {payment.description || 'No description'}</div>
+                                    </div>
+                                  </div>
+
+                                  {/* Stripe Details */}
+                                  {paymentDetails.paymentIntent && (
+                                    <div className="space-y-2">
+                                      <h4 className="font-semibold flex items-center gap-2">
+                                        <FileText className="h-4 w-4" />
+                                        Complete Stripe Response
+                                      </h4>
+                                      <div className="bg-muted p-4 rounded-lg border max-h-96 overflow-y-auto">
+                                        <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                                          {JSON.stringify(paymentDetails.paymentIntent, null, 2)}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-center py-8">
+                                  <p className="text-destructive">Failed to load payment details</p>
+                                </div>
+                              )}
+                            </div>
                           </DialogContent>
                         </Dialog>
                       </div>
