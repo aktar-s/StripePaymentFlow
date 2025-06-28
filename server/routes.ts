@@ -7,18 +7,18 @@ import { insertPaymentSchema, insertRefundSchema } from "@shared/schema";
 import { z } from "zod";
 
 // Environment variables validation
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required environment variable: STRIPE_SECRET_KEY');
+if (!process.env.STRIPE_SECRET_KEY_LIVE) {
+  throw new Error('Missing required environment variable: STRIPE_SECRET_KEY_LIVE');
 }
 
 // Webhook secret is optional for basic functionality
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_LIVE, {
   apiVersion: "2023-10-16",
 });
 
-const isLiveMode = process.env.STRIPE_SECRET_KEY.startsWith('sk_live_');
+const isLiveMode = process.env.STRIPE_SECRET_KEY_LIVE.startsWith('sk_live_');
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -338,7 +338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/stripe-status", (req, res) => {
     res.json({
       isLiveMode,
-      hasKeys: !!process.env.STRIPE_SECRET_KEY,
+      hasKeys: !!process.env.STRIPE_SECRET_KEY_LIVE,
     });
   });
 

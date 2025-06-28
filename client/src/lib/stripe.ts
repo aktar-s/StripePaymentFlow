@@ -1,10 +1,10 @@
 import { loadStripe } from '@stripe/stripe-js';
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required environment variable: VITE_STRIPE_PUBLIC_KEY');
+if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY_LIVE) {
+  throw new Error('Missing required environment variable: VITE_STRIPE_PUBLIC_KEY_LIVE');
 }
 
-export const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+export const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY_LIVE);
 
 export const formatCurrency = (amount: number, currency = 'GBP'): string => {
   return new Intl.NumberFormat('en-GB', {
