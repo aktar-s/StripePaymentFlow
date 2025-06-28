@@ -89,6 +89,15 @@ function PaymentForm({ onPaymentSuccess }: PaymentFormProps) {
           variant: "destructive",
         });
       } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Update payment status in database
+        try {
+          await apiRequest('POST', '/api/update-payment-status', {
+            paymentIntentId: paymentIntent.id
+          });
+        } catch (updateError) {
+          console.error('Error updating payment status:', updateError);
+        }
+
         toast({
           title: "Payment Successful",
           description: `Payment of £${formData.amount.toFixed(2)} processed successfully!`,

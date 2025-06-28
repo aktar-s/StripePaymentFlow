@@ -90,6 +90,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update payment status after successful confirmation
+  app.post("/api/update-payment-status", async (req, res) => {
+    try {
+      const { paymentIntentId } = req.body;
+      
+      if (!paymentIntentId) {
+        return res.status(400).json({ error: "Payment Intent ID is required" });
+      }
+
+      // Get the latest payment status from Stripe
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      const payment = await storage.getPaymentByIntentId(paymentIntentId);
+
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      // Get charge details if payment succeeded
+      let cardLast4 = null;
+      let paymentMethodType = null;
+      let stripeFee = null;
+
+      if (paymentIntent.status === 'succeeded' && paymentIntent.latest_charge) {
+        const charge = await stripe.charges.retrieve(paymentIntent.latest_charge as string);
+        cardLast4 = charge.payment_method_details?.card?.last4 || null;
+        paymentMethodType = charge.payment_method_details?.type || null;
+        stripeFee = charge.balance_transaction ? (charge.balance_transaction as any).fee : null;
+      }
+
+      // Update payment in database
+      const updatedPayment = await storage.updatePayment(payment.id, {
+        status: paymentIntent.status,
+        cardLast4,
+        paymentMethodType,
+        stripeFee,
+      });
+
+      res.json({ 
+        success: true, 
+        payment: updatedPayment 
+      });
+    } catch (error: any) {
+      console.error("Error updating payment status:", error);
+      res.status(500).json({ 
+        error: "Error updating payment status: " + error.message 
+      });
+    }
+  });
+
   // List payments
   app.get("/api/payments", async (req, res) => {
     try {
