@@ -282,7 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         refundId: refund.id,
         paymentId: payment.id,
         paymentIntentId,
-        amount: refund.amount,
+        amount: refund.amount / 100, // Convert pence back to pounds for database storage
         currency: refund.currency,
         reason,
         status: refund.status || "processing",
@@ -341,6 +341,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: `Cleared ${testPayments.length} test payments` });
     } catch (error: any) {
       res.status(500).json({ message: "Error clearing test payments: " + error.message });
+    }
+  });
+
+  // Fix currency amounts - one-time fix for existing records
+  app.post("/api/fix-currency", async (req, res) => {
+    try {
+      const refunds = await storage.listRefunds();
+      let fixedCount = 0;
+      
+      for (const refund of refunds) {
+        // Fix refunds that have amounts in pence instead of pounds (amount = 50 should be 0.50)
+        if (refund.amount === 50) {
+          const correctedAmount = 0.50;
+          await storage.updateRefund(refund.id, { amount: correctedAmount });
+          console.log(`Fixed refund ${refund.id}: ${refund.amount} → ${correctedAmount}`);
+          fixedCount++;
+        }
+      }
+      
+      res.json({ 
+        message: `Fixed ${fixedCount} refund records`,
+        fixedCount 
+      });
+    } catch (error: any) {
+      console.error("Error fixing currency:", error);
+      res.status(500).json({ 
+        error: "Error fixing currency: " + error.message 
+      });
     }
   });
 

@@ -230,7 +230,7 @@ export function RefundManagement({ selectedPaymentIntentId }: RefundManagementPr
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">
                       Amount: <strong>{formatCurrency(refund.amount)}</strong>
-                      {refund.amount < 100 && ' (Partial)'}
+                      {refund.amount < 1 && ' (Partial)'}
                     </span>
                     <span className="text-muted-foreground">
                       {formatDate(refund.createdAt)}

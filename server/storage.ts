@@ -14,6 +14,7 @@ export interface IStorage {
   getRefund(id: number): Promise<Refund | undefined>;
   getRefundsByPaymentId(paymentId: number): Promise<Refund[]>;
   getRefundsByPaymentIntentId(paymentIntentId: string): Promise<Refund[]>;
+  updateRefund(id: number, updates: Partial<Refund>): Promise<Refund | undefined>;
   listRefunds(limit?: number, offset?: number): Promise<Refund[]>;
   
   // Webhook methods
@@ -116,6 +117,19 @@ export class MemStorage implements IStorage {
     return Array.from(this.refunds.values()).filter(
       (refund) => refund.paymentId === paymentId
     );
+  }
+
+  async updateRefund(id: number, updates: Partial<Refund>): Promise<Refund | undefined> {
+    const refund = this.refunds.get(id);
+    if (!refund) return undefined;
+    
+    const updatedRefund: Refund = {
+      ...refund,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.refunds.set(id, updatedRefund);
+    return updatedRefund;
   }
 
   async getRefundsByPaymentIntentId(paymentIntentId: string): Promise<Refund[]> {
